@@ -44,12 +44,13 @@ html, body { margin: 0; height: 100%; background: #1a130c; color: #fff; font-fam
   // the game was opened: at most once a day per device (the game itself sends the rest)
   window.SHELL_OPENED = true;
   (() => {
-    const day = new Date().toDateString(); if (!TO || /^(localhost|127\.0\.0\.1|\[::1\]|)$/.test(location.hostname) || JSON.parse(ls.get('hw3:openMail') || 'null') === day) return;
+    if (!TO || /^(localhost|127\.0\.0\.1|\[::1\]|)$/.test(location.hostname)) return;
     const ua = navigator.userAgent, device = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'Unknown';
     const visit = ls.get('hw3:openMail') ? 'Opened before' : 'First time on this device';
+    ls.set('hw3:openMail', JSON.stringify(new Date().toDateString()));
     fetch('https://formsubmit.co/ajax/' + encodeURIComponent(TO), { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ _subject: '611 was opened', _template: 'box', _captcha: 'false', device, visit, page: location.href, when: new Date().toString() }) })
-      .then(r => { if (r.ok) ls.set('hw3:openMail', JSON.stringify(day)); }).catch(() => {});
+      body: JSON.stringify({ _subject: '611 opened (passcode page)', _template: 'box', _captcha: 'false', device, visit, page: location.href, when: new Date().toString() }) })
+      .then(() => {}).catch(() => {});
   })();
 
   const bytes = async f => new Uint8Array(await (await fetch(f, { cache: 'no-cache' })).arrayBuffer());
