@@ -41,17 +41,30 @@ html, body { margin: 0; height: 100%; background: #1a130c; color: #fff; font-fam
   const SALT = Uint8Array.from(atob('9ZEPrTs+W14ZU5pjsE1PlQ=='), c => c.charCodeAt(0)), ITER = 250000, MUSIC = true, TO = "cecilnagetdino@gmail.com";
   const $ = s => document.querySelector(s), ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
   const S = window.crypto && crypto.subtle;
-  // the game was opened: at most once a day per device (the game itself sends the rest)
-  window.SHELL_OPENED = true;
-  (() => {
-    if (!TO || /^(localhost|127\.0\.0\.1|\[::1\]|)$/.test(location.hostname)) return;
-    const ua = navigator.userAgent, device = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'Unknown';
-    const visit = ls.get('hw3:openMail') ? 'Opened before' : 'First time on this device';
+  // sign-in alerts, like an app's: the page was opened, the passcode was right, the passcode was wrong.
+  // Each says the kind of device and browser, and roughly where (a city from the connection, never GPS).
+  window.SHELL_OPENED = true;   // the game leaves the "opened" mail to this page
+  const WHO = !TO || /^(localhost|127\.0\.0\.1|\[::1\]|)$/.test(location.hostname) ? null : (async () => {
+    const ua = navigator.userAgent, m = re => (ua.match(re) || [])[1] || '';
+    const os = /iPhone|iPod/.test(ua) ? 'iPhone · iOS ' + m(/OS (\d+_\d+)/).replace('_', '.') : /iPad/.test(ua) || (/Mac OS X/.test(ua) && navigator.maxTouchPoints > 1) ? 'iPad' : /Android/.test(ua) ? 'Android ' + m(/Android ([\d.]+)/) : /Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'Unknown';
+    let model = m(/Android [\d.]+; (?:[a-z]{2}[-_][a-z]{2}; )?([^;)]+?)(?: Build[^;)]*)?\)/i);
+    try { if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) { const h = await navigator.userAgentData.getHighEntropyValues(['model']); if (h.model) model = h.model; } } catch (e) { }
+    if (model === 'K') model = '';   // Chrome hides the model behind a "K"
+    const browser = /Instagram/.test(ua) ? 'Instagram' : /\bLine\//.test(ua) ? 'LINE' : /WhatsApp/.test(ua) ? 'WhatsApp' : /CriOS/.test(ua) ? 'Chrome' : /FxiOS|Firefox/.test(ua) ? 'Firefox' : /EdgA?\/|EdgiOS/.test(ua) ? 'Edge' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Chrome/.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : 'Browser';
+    let near = 'Unknown';
+    try {
+      const ctl = new AbortController(); setTimeout(() => ctl.abort(), 5000);
+      const g = await (await fetch('https://get.geojs.io/v1/ip/geo.json', { signal: ctl.signal })).json();
+      near = [...new Set([g.city, g.region, g.country].filter(Boolean))].join(', ') + (g.organization_name ? ' (' + g.organization_name + ')' : '');
+    } catch (e) { }
+    const visit = ls.get('hw3:openMail') ? 'Opened before on this device' : 'First time on this device';
     ls.set('hw3:openMail', JSON.stringify(new Date().toDateString()));
-    fetch('https://formsubmit.co/ajax/' + encodeURIComponent(TO), { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ _subject: '611 opened (passcode page)', _template: 'box', _captcha: 'false', device, visit, page: location.href, when: new Date().toString() }) })
-      .then(() => {}).catch(() => {});
+    return { device: [os, model].filter(Boolean).join(' · '), browser, near, visit };
   })();
+  const notify = (subject, extra) => { if (WHO) WHO.then(w => fetch('https://formsubmit.co/ajax/' + encodeURIComponent(TO), { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(Object.assign({ _subject: subject, _template: 'box', _captcha: 'false' }, w, extra, { when: new Date().toString() })) })).catch(() => {}); };
+  notify('611 opened (passcode page)', {});
+  let tries = 0;
 
   const bytes = async f => new Uint8Array(await (await fetch(f, { cache: 'no-cache' })).arrayBuffer());
   const open = async (key, data) => new Uint8Array(await S.decrypt({ name: 'AES-GCM', iv: data.slice(0, 12) }, key, data.slice(12)));
@@ -91,8 +104,8 @@ html, body { margin: 0; height: 100%; background: #1a130c; color: #fff; font-fam
     if (!S) { $('#err').textContent = 'This browser cannot open it. Try Safari or Chrome.'; return; }
     busy(true); $('#err').textContent = '';
     let opened;
-    try { const key = await derive($('#pw').value.trim().toLowerCase()); opened = await unlock(key); }
-    catch (err) { busy(false); $('#err').textContent = "That's not it."; const g = $('#gin'); g.classList.remove('shake'); void g.offsetWidth; g.classList.add('shake'); $('#pw').select(); return; }
+    try { const key = await derive($('#pw').value.trim().toLowerCase()); opened = await unlock(key); notify('611 · passcode entered', { attempts: String(tries + 1) }); }
+    catch (err) { if (++tries <= 3) notify('611 · wrong passcode', { attempt: String(tries) }); busy(false); $('#err').textContent = "That's not it."; const g = $('#gin'); g.classList.remove('shake'); void g.offsetWidth; g.classList.add('shake'); $('#pw').select(); return; }
     try { await start(opened); } catch (err) { busy(false); $('#err').textContent = 'It could not load. Check the connection and try again.'; }
   });
   setTimeout(() => { try { if (!$('#lk').hidden) $('#pw').focus(); } catch (e) { } }, 300);
