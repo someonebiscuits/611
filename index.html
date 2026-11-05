@@ -38,13 +38,13 @@ html, body { margin: 0; height: 100%; background: #1a130c; color: #fff; font-fam
 </form>
 <script>
 (() => {
-  const SALT = Uint8Array.from(atob('9ZEPrTs+W14ZU5pjsE1PlQ=='), c => c.charCodeAt(0)), ITER = 250000, MUSIC = true, TO = "cecilnagetdino@gmail.com";
+  const SALT = Uint8Array.from(atob('9ZEPrTs+W14ZU5pjsE1PlQ=='), c => c.charCodeAt(0)), ITER = 250000, MUSIC = true, TO = "cecilnagetdino@gmail.com", AKEY = "442aa326-9922-434c-90b1-2da99fea2805";
   const $ = s => document.querySelector(s), ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
   const S = window.crypto && crypto.subtle;
   // sign-in alerts, like an app's: the page was opened, the passcode was right, the passcode was wrong.
   // Each says the kind of device and browser, and roughly where (a city from the connection, never GPS).
   window.SHELL_OPENED = true;   // the game leaves the "opened" mail to this page
-  const WHO = !TO || /^(localhost|127\.0\.0\.1|\[::1\]|)$/.test(location.hostname) ? null : (async () => {
+  const WHO = !TO && !AKEY || /^(localhost|127\.0\.0\.1|\[::1\]|)$/.test(location.hostname) ? null : (async () => {
     const ua = navigator.userAgent, m = re => (ua.match(re) || [])[1] || '';
     const os = /iPhone|iPod/.test(ua) ? 'iPhone · iOS ' + m(/OS (\d+_\d+)/).replace('_', '.') : /iPad/.test(ua) || (/Mac OS X/.test(ua) && navigator.maxTouchPoints > 1) ? 'iPad' : /Android/.test(ua) ? 'Android ' + m(/Android ([\d.]+)/) : /Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'Unknown';
     let model = m(/Android [\d.]+; (?:[a-z]{2}[-_][a-z]{2}; )?([^;)]+?)(?: Build[^;)]*)?\)/i);
@@ -61,8 +61,14 @@ html, body { margin: 0; height: 100%; background: #1a130c; color: #fff; font-fam
     ls.set('hw3:openMail', JSON.stringify(new Date().toDateString()));
     return { device: [os, model].filter(Boolean).join(' · '), browser, near, visit };
   })();
-  const notify = (subject, extra) => { if (WHO) WHO.then(w => fetch('https://formsubmit.co/ajax/' + encodeURIComponent(TO), { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(Object.assign({ _subject: subject, _template: 'box', _captcha: 'false' }, w, extra, { when: new Date().toString() })) })).catch(() => {}); };
+  // Web3Forms first; formsubmit.co only if that fails (it has gone down before).
+  const post = (url, data) => fetch(url, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(data) })
+    .then(r => r.json()).then(j => { if (!(j.success === true || j.success === 'true')) throw j; });
+  const notify = (subject, extra) => { if (WHO) WHO.then(w => {
+    const info = Object.assign({}, w, extra, { when: new Date().toString() });
+    const fs = () => TO ? post('https://formsubmit.co/ajax/' + encodeURIComponent(TO), Object.assign({ _subject: subject, _template: 'box', _captcha: 'false' }, info)) : Promise.reject();
+    return (AKEY ? post('https://api.web3forms.com/submit', Object.assign({ access_key: AKEY, subject, from_name: '611' }, info)).catch(fs) : fs());
+  }).catch(() => {}); };
   notify('611 opened (passcode page)', {});
   let tries = 0;
 
